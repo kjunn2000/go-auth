@@ -4,8 +4,8 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/dgrijalva/jwt-go"
-	"github.com/kjunn2000/go-auth/model"
+	"github.com/dgrijalva/jwt-go/v4"
+	"github.com/kjunn2000/go-auth/internal/go-auth/model"
 )
 
 func JwtTokenVerifier(next http.Handler) http.Handler {

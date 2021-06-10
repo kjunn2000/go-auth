@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/kjunn2000/go-auth/handlers"
-	"github.com/kjunn2000/go-auth/middleware"
+	"github.com/kjunn2000/go-auth/internal/go-auth/handlers"
+	"github.com/kjunn2000/go-auth/internal/go-auth/middleware"
 )
 
 func main() {
@@ -18,6 +18,7 @@ func main() {
 
 	pr.HandleFunc("/api/v1/login", handlers.LoginHandler)
 	pr.HandleFunc("/api/v1/refresh-token", handlers.RefreshTokenHandler)
+	pr.HandleFunc("/api/v1/account/opening", handlers.AccOpeningHandler)
 
 	gr.HandleFunc("/api/v1/home", handlers.HomeHandler)
 	gr.Use(middleware.JwtTokenVerifier)

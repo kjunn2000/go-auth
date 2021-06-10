@@ -2,75 +2,69 @@ package handlers
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 	"time"
 
-	"github.com/dgrijalva/jwt-go"
-	"github.com/kjunn2000/go-auth/model"
+	"github.com/dgrijalva/jwt-go/v4"
+	"github.com/kjunn2000/go-auth/config"
+	"github.com/kjunn2000/go-auth/internal/go-auth/model"
+	"github.com/kjunn2000/go-auth/internal/go-auth/postgresql"
+	"go.uber.org/zap"
 )
 
-var Users model.Users
-
-func init() {
-
-	Users = make(map[string]*model.User)
-	user := &model.User{
-		Username: "kaijun",
-		Password: "pass",
-	}
-	Users["kaijun"] = user
-}
-
 func LoginHandler(w http.ResponseWriter, r *http.Request) {
+
 	user := model.User{}
 	json.NewDecoder(r.Body).Decode(&user)
 	username := user.Username
-	password := user.Password
+	password := user.AccPassword
 	if username == "" || password == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	u, ok := Users[username]
-	if !ok || u.Password != password {
+
+	Log, _ := zap.NewDevelopment()
+	as := postgresql.NewAuthStore(Log, config.NewConnString())
+
+	u, err := as.FindUserByUsername(username)
+
+	if err != nil || u.AccPassword != password {
 		w.WriteHeader(http.StatusBadRequest)
-		log.Println("hello1")
 		return
 	}
 	atc := model.Claims{
 		Username: username,
 		StandardClaims: jwt.StandardClaims{
-			IssuedAt:  time.Now().Unix(),
-			ExpiresAt: time.Now().Add(time.Minute * 10).Unix(),
+			IssuedAt:  jwt.Now(),
+			ExpiresAt: jwt.At(time.Now().Add(time.Minute * 10)),
 		},
 	}
 	rtc := model.Claims{
 		Username: username,
 		StandardClaims: jwt.StandardClaims{
-			IssuedAt:  time.Now().Unix(),
-			ExpiresAt: time.Now().Add(time.Minute * 45).Unix(),
+			IssuedAt:  jwt.Now(),
+			ExpiresAt: jwt.At(time.Now().Add(time.Minute * 45)),
 		},
 	}
 	att := jwt.NewWithClaims(jwt.SigningMethodHS256, atc)
 	rtt := jwt.NewWithClaims(jwt.SigningMethodHS256, rtc)
 
-	ats, err := att.SignedString(model.SecretKey)
-	rts, err := rtt.SignedString(model.SecretKey)
+	ats, aerr := att.SignedString(model.SecretKey)
+	rts, rerr := rtt.SignedString(model.SecretKey)
 
-	if err != nil {
+	if aerr != nil || rerr != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		log.Fatal(err)
 		return
 	}
 	accessTokenCookie := &http.Cookie{
 		Name:    "access_token",
 		Value:   ats,
-		Expires: time.Unix(atc.ExpiresAt, 0),
+		Expires: atc.ExpiresAt.Time,
 	}
 	refreshTokenCookie := &http.Cookie{
 		Name:    "refresh_token",
 		Value:   rts,
-		Expires: time.Unix(rtc.ExpiresAt, 0),
+		Expires: rtc.ExpiresAt.Time,
 	}
 	http.SetCookie(w, accessTokenCookie)
 	http.SetCookie(w, refreshTokenCookie)
@@ -101,7 +95,7 @@ func RefreshTokenHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if time.Unix(c.ExpiresAt, 0).Before(time.Now()) {
+	if c.ExpiresAt.Time.Before(time.Now()) {
 		w.WriteHeader(int(http.StatusBadRequest))
 		return
 	}
@@ -109,8 +103,8 @@ func RefreshTokenHandler(w http.ResponseWriter, r *http.Request) {
 	atc := model.Claims{
 		Username: c.Username,
 		StandardClaims: jwt.StandardClaims{
-			IssuedAt:  time.Now().Unix(),
-			ExpiresAt: time.Now().Add(time.Minute * 10).Unix(),
+			IssuedAt:  jwt.Now(),
+			ExpiresAt: jwt.At(time.Now().Add(time.Minute * 10)),
 		},
 	}
 
@@ -120,13 +114,12 @@ func RefreshTokenHandler(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		log.Fatal(err)
 		return
 	}
 	accessTokenCookie := &http.Cookie{
 		Name:    "access_token",
 		Value:   ats,
-		Expires: time.Unix(atc.ExpiresAt, 0),
+		Expires: c.ExpiresAt.Time,
 	}
 
 	http.SetCookie(w, accessTokenCookie)
